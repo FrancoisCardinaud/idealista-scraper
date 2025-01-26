@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Real Estate Data Scraper</title>
+  <style>
+    body {
+      width: 400px;
+      padding: 16px;
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    button {
+      width: 100%;
+      padding: 8px;
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+
+    button:hover:not(:disabled) {
+      background-color: #45a049;
+    }
+
+    #status {
+      padding: 8px;
+      margin-top: 8px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .success {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .error {
+      background-color: #ffebee;
+      color: #c62828;
+    }
+
+    .data-display {
+      display: none;
+      background-color: #f5f5f5;
+      padding: 12px;
+      border-radius: 4px;
+      margin: 12px 0;
+    }
+
+    .data-display.visible {
+      display: block;
+    }
+
+    .data-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 8px 0;
+      font-size: 14px;
+    }
+
+    .data-label {
+      font-weight: bold;
+      color: #666;
+    }
+
+    .data-value {
+      color: #333;
+      word-break: break-all;
+      max-width: 250px;
+      text-align: right;
+    }
+
+    .export-section {
+      border-top: 1px solid #ddd;
+      padding-top: 16px;
+      margin-top: 16px;
+    }
+
+    .button-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Real Estate Data Scraper</h2>
+    
+    <button id="scrapeData">Scrape Property Data</button>
+    
+    <div id="dataDisplay" class="data-display">
+      <div class="data-row">
+        <span class="data-label">URL:</span>
+        <span class="data-value" id="urlValue"></span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">Price:</span>
+        <span class="data-value" id="priceValue"></span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">Address:</span>
+        <span class="data-value" id="addressValue"></span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">Phone:</span>
+        <span class="data-value" id="phoneValue"></span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">Surface Area:</span>
+        <span class="data-value" id="surfaceValue"></span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">Rooms:</span>
+        <span class="data-value" id="roomsValue"></span>
+      </div>
+    </div>
+
+    <div class="export-section">
+      <div class="button-group">
+        <button id="exportTXT" disabled>Export TXT</button>
+        <button id="exportJSON" disabled>Export JSON</button>
+        <button id="exportCSV" disabled>Export CSV</button>
+        <button id="exportSheets" disabled>Export to Sheets</button>
+      </div>
+    </div>
+
+    <div id="status"></div>
+  </div>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

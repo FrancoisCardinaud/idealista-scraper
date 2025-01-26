@@ -1,0 +1,8 @@
+{
+  "name": "real-estate-scraper",
+  "version": "1.0.0",
+  "description": "Chrome extension for scraping real estate data",
+  "scripts": {
+    "build-icons": "node scripts/build-icons.js"
+  }
+}

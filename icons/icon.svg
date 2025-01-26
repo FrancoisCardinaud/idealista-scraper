@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <rect width="128" height="128" fill="#4CAF50" rx="24"/>
+  <!-- House shape -->
+  <path d="M64 20L20 64h12v44h64V64h12L64 20zm0 12l32 32v36H32V64l32-32z" fill="white"/>
+  <!-- Euro symbol -->
+  <text x="64" y="85" font-size="32" fill="white" text-anchor="middle" font-family="Arial, sans-serif">€</text>
+</svg>
