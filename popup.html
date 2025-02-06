@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <title>Real Estate Data Scraper</title>
   <style>
     body {
@@ -94,6 +96,43 @@
       grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
+
+    .message-box {
+      margin-top: 16px;
+      padding: 12px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+      border: 1px solid #e0e0e0;
+    }
+
+    .message-box textarea {
+      width: 100%;
+      min-height: 80px;
+      margin-bottom: 8px;
+      padding: 8px;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      resize: vertical;
+      font-family: Arial, sans-serif;
+    }
+
+    .message-box .copy-button {
+      background-color: #2196F3;
+      width: auto;
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .message-box .copy-button:hover {
+      background-color: #1976D2;
+    }
+
+    .message-box .copy-success {
+      font-size: 12px;
+      color: #2e7d32;
+      margin-left: 8px;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -139,6 +178,30 @@
     </div>
 
     <div id="status"></div>
+
+    <div class="message-box">
+      <h3>Message Template</h3>
+      <textarea id="messageTemplate" readonly>Buongiorno,
+
+Abbiamo visto il suo annuncio su Idealista. Offriamo servizi digitali per valorizzare la sua vendita indipendente, con visite virtuali 3D e fotografie professionali che accelerano la vendita e migliorano l'esperienza degli acquirenti.
+                
+Prisma3D non è un'agenzia immobiliare, ma le forniamo strumenti avanzati: visite virtuali, foto di alta qualità, planimetrie, misurazioni precise e analisi dettagliate, il tutto a tariffe competitive.
+                
+Perché una visita virtuale 3D?
+→ Permette agli acquirenti di esplorare l'immobile da casa, attirando più clienti seri e riducendo i tempi di vendita.
+                
+I vantaggi:
+→ Studi dimostrano che le visite 3D rendono le vendite più rapide, le negoziazioni più efficaci e migliorano il valore finale della transazione.
+                
+Scopra di più su www.prisma3d.it. Restiamo a disposizione!
+                
+Cordiali saluti,
+Il team Prisma3D</textarea>
+      <div style="display: flex; align-items: center;">
+        <button class="copy-button" id="copyMessage">Copy Message</button>
+        <span class="copy-success" id="copySuccess">✓ Copied!</span>
+      </div>
+    </div>
   </div>
   <script src="popup.js" type="module"></script>
 </body>

@@ -119,55 +119,148 @@ async function extractDataAndSendMessage() {
     }
 
     // Extract phone number
-    const phoneButton = document.querySelector('.icon-phone, .phone-btn');
-    if (phoneButton) {
-      console.log('Found phone button, clicking...');
-      phoneButton.click();
+    async function getPhoneNumber(maxAttempts = 5) {
+      console.log('Starting phone number extraction...');
       
-      // Wait for phone number to appear with retries
-      let phoneText = null;
-      let retries = 0;
-      const maxRetries = 5;
-      
-      while (!phoneText && retries < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      // Find and click the phone button
+      const phoneButtonSelectors = [
+        'a.see-phones-btn.icon-phone',
+        '.see-phones-btn.icon-phone',
+        '.hidden-contact-phones_link',
+        'a[role="button"].see-phones-btn'
+      ];
+
+      let phoneButton = null;
+      for (const selector of phoneButtonSelectors) {
+        phoneButton = document.querySelector(selector);
+        if (phoneButton) {
+          console.log('Found phone button:', phoneButton.outerHTML);
+          phoneButton.click();
+          console.log('Phone button clicked');
+          break;
+        }
+      }
+
+      if (!phoneButton) {
+        console.log('No phone button found');
+        return null;
+      }
+
+      // Wait for phone number to appear and extract it
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        console.log(`Attempt ${attempt}/${maxAttempts} to find phone number`);
         
-        // Try multiple selectors for phone number
+        // Wait for the number to load
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Try multiple selectors for the phone number
         const phoneSelectors = [
+          '.txt-bold.txt-big',
           '.phone-number',
-          'span[data-phone]',
-          '.txt-bold.p-phone',
-          '.icon-phone + span',
-          'a[href^="tel:"]'
+          '.show-phone-number span',
+          '.show-phone span',
+          '.phone-content',
+          '.phone-number-content',
+          'p[data-track-click="SHOW_PHONE"]'
         ];
-        
+
         for (const selector of phoneSelectors) {
           const phoneElement = document.querySelector(selector);
           if (phoneElement) {
-            // Try both textContent and data attribute
-            phoneText = phoneElement.getAttribute('data-phone') || phoneElement.textContent.trim();
-            if (phoneText && phoneText !== 'Chiama' && /\d/.test(phoneText)) {
-              data.phone = phoneText.replace(/\D/g, ''); // Keep only digits
-              console.log('Found phone number:', data.phone);
-              break;
+            const phoneText = phoneElement.textContent.trim();
+            // Check if it looks like a phone number (at least 6 digits)
+            if (phoneText.replace(/\D/g, '').length >= 6) {
+              console.log('Found phone number:', phoneText);
+              return phoneText;
             }
           }
         }
-        
-        retries++;
-        console.log(`Attempt ${retries}/${maxRetries} to find phone number`);
       }
-      
-      if (!data.phone) {
-        console.log('Failed to extract phone number after', maxRetries, 'attempts');
-      }
+
+      console.log('Failed to find phone number after all attempts');
+      return null;
+    }
+
+    data.phone = await getPhoneNumber();
+    if (data.phone) {
+      console.log('Successfully extracted phone number:', data.phone);
     } else {
-      console.log('No phone button found');
+      console.log('No phone number found');
     }
 
     // Try to send message
     try {
-      data.messageSent = await sendMessage();
+      data.messageSent = await (async function sendMessage() {
+        console.log('Processing Idealista.it message...');
+        
+        // Helper function to simulate button clicks
+        async function simulateButtonClick(button) {
+          console.log('Simulating click on button:', button);
+          
+          // First click attempt with full event simulation
+          button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+          button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+          button.click();
+          console.log('First click completed');
+          
+          // Wait a bit
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Second click attempt
+          button.click();
+          console.log('Second click completed');
+          
+          // Final wait to ensure everything is processed
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        const textarea = document.querySelector('textarea[name="contact-message"]');
+        if (!textarea) {
+          console.error('Message textarea not found on Idealista.it');
+          return false;
+        }
+        
+        console.log('Found textarea:', textarea);
+        textarea.value = `Buongiorno,
+
+Abbiamo visto il suo annuncio su Idealista. Offriamo servizi digitali per valorizzare la sua vendita indipendente, con visite virtuali 3D e fotografie professionali che accelerano la vendita e migliorano l'esperienza degli acquirenti.
+        
+Prisma3D non è un'agenzia immobiliare, ma le forniamo strumenti avanzati: visite virtuali, foto di alta qualità, planimetrie, misurazioni precise e analisi dettagliate, il tutto a tariffe competitive.
+        
+Perché una visita virtuale 3D?
+→ Permette agli acquirenti di esplorare l'immobile da casa, attirando più clienti seri e riducendo i tempi di vendita.
+        
+I vantaggi:
+→ Studi dimostrano che le visite 3D rendono le vendite più rapide, le negoziazioni più efficaci e migliorano il valore finale della transazione.
+        
+Scopra di più su www.prisma3d.it. Restiamo a disposizione!
+        
+Cordiali saluti,
+Il team Prisma3D`;
+        console.log('Message set to:', textarea.value);
+        
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        const sendButton = document.querySelector('button.submit-button.btn.action.txt-bold.txt-big.desktop.button-chat.icon-chat');
+        console.log('Found chat button:', sendButton?.outerHTML);
+        
+        if (!sendButton) {
+          console.log('Trying mobile button...');
+          const mobileButton = document.querySelector('button.submit-button.btn.action.txt-bold.txt-big.no-desktop.button-chat.icon-chat');
+          console.log('Found mobile button:', mobileButton?.outerHTML);
+          
+          if (!mobileButton) {
+            console.error('No chat button found on Idealista.it');
+            return false;
+          }
+          await simulateButtonClick(mobileButton);
+        } else {
+          await simulateButtonClick(sendButton);
+        }
+        
+        console.log('Message sent on Idealista.it');
+        return true;
+      })();
       console.log('Message sending status:', data.messageSent ? 'Success' : 'Failed');
     } catch (error) {
       console.error('Error in message sending:', error);
@@ -189,64 +282,6 @@ async function extractDataAndSendMessage() {
   console.log('========================');
 
   return data;
-}
-
-// Helper function to simulate button clicks
-async function simulateButtonClick(button) {
-  console.log('Simulating click on button:', button);
-  
-  // First click attempt with full event simulation
-  button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-  button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-  button.click();
-  console.log('First click completed');
-  
-  // Wait a bit
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Second click attempt
-  button.click();
-  console.log('Second click completed');
-  
-  // Final wait to ensure everything is processed
-  await new Promise(resolve => setTimeout(resolve, 500));
-}
-
-// Function to send message
-async function sendMessage() {
-  console.log('Processing Idealista.it message...');
-  
-  const textarea = document.querySelector('textarea[name="contact-message"]');
-  if (!textarea) {
-    console.error('Message textarea not found on Idealista.it');
-    return false;
-  }
-  
-  console.log('Found textarea:', textarea);
-  textarea.value = 'Salve, sono interessato a questo immobile. È ancora disponibile?';
-  console.log('Message set to:', textarea.value);
-  
-  textarea.dispatchEvent(new Event('input', { bubbles: true }));
-  
-  const sendButton = document.querySelector('button.submit-button.btn.action.txt-bold.txt-big.desktop.button-chat.icon-chat');
-  console.log('Found chat button:', sendButton?.outerHTML);
-  
-  if (!sendButton) {
-    console.log('Trying mobile button...');
-    const mobileButton = document.querySelector('button.submit-button.btn.action.txt-bold.txt-big.no-desktop.button-chat.icon-chat');
-    console.log('Found mobile button:', mobileButton?.outerHTML);
-    
-    if (!mobileButton) {
-      console.error('No chat button found on Idealista.it');
-      return false;
-    }
-    await simulateButtonClick(mobileButton);
-  } else {
-    await simulateButtonClick(sendButton);
-  }
-  
-  console.log('Message sent on Idealista.it');
-  return true;
 }
 
 // Function to detect if we're on a search results page
@@ -372,13 +407,35 @@ async function processSearchResults(tab) {
 document.addEventListener('DOMContentLoaded', function() {
   const buttons = {
     scrapeData: document.getElementById('scrapeData'),
+    copyMessage: document.getElementById('copyMessage'),
     exportTXT: document.getElementById('exportTXT'),
     exportJSON: document.getElementById('exportJSON'),
     exportCSV: document.getElementById('exportCSV')
   };
   
+  const elements = {
+    status: document.getElementById('status'),
+    messageTemplate: document.getElementById('messageTemplate'),
+    copySuccess: document.getElementById('copySuccess'),
+    dataDisplay: document.getElementById('dataDisplay')
+  };
+
   let scrapedData = null;
 
+  // Copy message functionality
+  buttons.copyMessage.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(elements.messageTemplate.value);
+      elements.copySuccess.style.display = 'inline';
+      setTimeout(() => {
+        elements.copySuccess.style.display = 'none';
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy text:', err);
+    }
+  });
+
+  // Scrape data functionality
   buttons.scrapeData.addEventListener('click', async () => {
     try {
       showStatus('Starting scrape...');
