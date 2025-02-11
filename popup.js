@@ -41,9 +41,10 @@ async function extractDataAndSendMessage() {
           priceText = priceElement.textContent.trim();
         }
         if (priceText) {
-          // Remove all non-digits except decimal point
-          const cleanPrice = priceText.replace(/[^\d,\.]/g, '').replace(',', '.');
-          const match = cleanPrice.match(/(\d+(?:\.\d+)?)/);
+          // Remove currency and other symbols, keeping only digits and dots
+          const cleanPrice = priceText.replace(/[^\d.]/g, '');
+          // Now convert the string with dots (e.g., '1.088.000') to a number
+          const match = cleanPrice.match(/(\d+(?:\.\d+)*)/);
           if (match) {
             data.price = parseInt(match[1].replace(/\./g, ''));
             console.log('Found price:', data.price, 'from selector:', selector);
@@ -155,22 +156,30 @@ async function extractDataAndSendMessage() {
 
         // Try multiple selectors for the phone number
         const phoneSelectors = [
-          '.txt-bold.txt-big',
-          '.phone-number',
-          '.show-phone-number span',
-          '.show-phone span',
-          '.phone-content',
-          '.phone-number-content',
-          'p[data-track-click="SHOW_PHONE"]'
+          '.hidden-contact-phones_link', // The original button container that now contains the number
+          '.see-phones-btn',
+          '.contact-phones',
+          '.phone-number-revealed',
+          '.hidden-contact-phones_text',
+          'span[itemprop="telephone"]',
+          'a[href^="tel:"]',
+          '.phone-number-formatted'
         ];
 
         for (const selector of phoneSelectors) {
           const phoneElement = document.querySelector(selector);
           if (phoneElement) {
-            const phoneText = phoneElement.textContent.trim();
-            // Check if it looks like a phone number (at least 6 digits)
-            if (phoneText.replace(/\D/g, '').length >= 6) {
-              console.log('Found phone number:', phoneText);
+            // Get phone number from either text content or href
+            let phoneText = phoneElement.textContent.trim() || phoneElement.getAttribute('href') || '';
+            
+            // Clean and validate the number
+            phoneText = phoneText
+              .replace(/[^\d+]/g, '') // Remove all non-digit/non-plus characters
+              .replace(/^00/, '+') // Convert international prefix
+              .replace(/^0/, '+39'); // Add country code if missing
+
+            if (phoneText.length >= 9) { // Italian numbers are typically 9-13 digits
+              console.log('Found cleaned phone number:', phoneText);
               return phoneText;
             }
           }
@@ -327,36 +336,73 @@ function getListingLinks() {
 
 // Function to process a single listing in a new tab
 async function processListing(url) {
-  console.log('Processing listing:', url);
-  
-  // Create a new tab
-  const tab = await chrome.tabs.create({ url, active: false });
-  
-  // Wait for page load
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  try {
-    // Extract data and send message
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: extractDataAndSendMessage
+  return new Promise((resolve) => {
+    chrome.tabs.create({ url, active: false }, (newTab) => {
+      chrome.tabs.onUpdated.addListener(async function listener(tabId, changeInfo) {
+        if (tabId === newTab.id && changeInfo.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          
+          try {
+            // Wait for page stabilization
+            await new Promise(r => setTimeout(r, 2000));
+            
+            // Focus the tab before extracting data and sending message
+            await chrome.tabs.update(newTab.id, { active: true });
+            await new Promise(r => setTimeout(r, 1000)); // Wait for focus
+            
+            // Extract data and send message using the existing function
+            const [result] = await chrome.scripting.executeScript({
+              target: { tabId: newTab.id },
+              func: extractDataAndSendMessage
+            });
+            
+            // Close the tab and return the result
+            await chrome.tabs.remove(newTab.id);
+            resolve(result?.result || null);
+          } catch (error) {
+            console.error(`Error processing listing ${url}:`, error);
+            await chrome.tabs.remove(newTab.id);
+            resolve(null);
+          }
+        }
+      });
     });
-    
-    // Close the tab
-    await chrome.tabs.remove(tab.id);
-    
-    return result?.result || null;
-  } catch (error) {
-    console.error(`Error processing listing ${url}:`, error);
-    // Make sure to close the tab even if there's an error
-    await chrome.tabs.remove(tab.id);
-    return null;
-  }
+  });
+}
+
+// Function to detach popup into a window
+async function detachPopup() {
+  return new Promise((resolve) => {
+    const popupUrl = chrome.runtime.getURL('popup.html');
+    // Get current window to position the new one relative to it
+    chrome.windows.getCurrent(async (currentWindow) => {
+      const width = 400;
+      const height = 600;
+      // Position the popup window to the right of the current window
+      const left = currentWindow.left + currentWindow.width;
+      const top = currentWindow.top;
+      
+      chrome.windows.create({
+        url: popupUrl,
+        type: 'popup',
+        width,
+        height,
+        left,
+        top,
+        focused: false // Keep focus on the listing tab
+      }, (newWindow) => {
+        resolve(newWindow);
+      });
+    });
+  });
 }
 
 // Function to process search results in batches
 async function processSearchResults(tab) {
   const results = [];
+  
+  // Detach popup first
+  await detachPopup();
   
   // Get all listing links
   const [linksResult] = await chrome.scripting.executeScript({
@@ -372,29 +418,25 @@ async function processSearchResults(tab) {
   const links = linksResult.result;
   console.log(`Found ${links.length} listings to process`);
   
-  // Process listings in batches of 3
-  const batchSize = 3;
-  for (let i = 0; i < links.length; i += batchSize) {
-    const batch = links.slice(i, i + batchSize);
-    console.log(`Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(links.length/batchSize)}`);
+  // Process listings one at a time since we need tab focus
+  for (let i = 0; i < links.length; i++) {
+    console.log(`Processing listing ${i + 1}/${links.length}`);
+    showStatus(`Processing listing ${i + 1}/${links.length}...`);
     
     try {
-      // Process all listings in the batch simultaneously
-      const batchResults = await Promise.all(
-        batch.map(url => processListing(url))
-      );
+      // Process single listing
+      const result = await processListing(links[i]);
       
-      // Add successful results to the array
-      batchResults.forEach(result => {
-        if (result) {
-          results.push(result);
-          // Update status
-          showStatus(`Processed ${results.length}/${links.length} listings...`);
-        }
-      });
+      // Add successful result to the array
+      if (result) {
+        results.push(result);
+        showStatus(`Processed ${results.length}/${links.length} listings...`);
+      }
       
-      // Add a small delay between batches
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Add a small delay between listings
+      if (i + 1 < links.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     } catch (error) {
       console.error('Error processing batch:', error);
     }
