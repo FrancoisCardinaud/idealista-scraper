@@ -346,14 +346,65 @@ async function processListing(url) {
             // Wait for page stabilization
             await new Promise(r => setTimeout(r, 2000));
             
-            // Focus the tab before extracting data and sending message
-            await chrome.tabs.update(newTab.id, { active: true });
-            await new Promise(r => setTimeout(r, 1000)); // Wait for focus
-            
-            // Extract data and send message using the existing function
+            // Extract data and send message in a single script execution
             const [result] = await chrome.scripting.executeScript({
               target: { tabId: newTab.id },
-              func: extractDataAndSendMessage
+              func: () => {
+                return new Promise((resolve) => {
+                  const data = {
+                    url: window.location.href,
+                    price: null,
+                    address: null,
+                    phone: null,
+                    messageSent: false
+                  };
+                  
+                  // Extract price
+                  const priceElement = document.querySelector('.info-data-price');
+                  if (priceElement) {
+                    const priceText = priceElement.textContent.trim();
+                    const cleanPrice = priceText.replace(/[^\d.]/g, '');
+                    data.price = parseInt(cleanPrice.replace(/\./g, ''));
+                  }
+
+                  // Extract address
+                  const addressElement = document.querySelector('.location');
+                  if (addressElement) {
+                    data.address = addressElement.textContent.trim();
+                  }
+
+                  // Click phone button and wait for number
+                  const phoneButton = document.querySelector('a.icon-phone');
+                  if (phoneButton) {
+                    phoneButton.click();
+                    setTimeout(() => {
+                      const phoneElement = document.querySelector('.phone-number');
+                      if (phoneElement) {
+                        data.phone = phoneElement.textContent.trim();
+                      }
+                      
+                      // Now try to send message
+                      const textarea = document.querySelector('textarea[name="message"]');
+                      const sendButton = document.querySelector('button[data-test="send-message"]');
+                      
+                      if (textarea && sendButton) {
+                        textarea.value = 'Salve, sono interessato a questo immobile. È ancora disponibile?';
+                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                        
+                        setTimeout(() => {
+                          sendButton.click();
+                          data.messageSent = true;
+                          resolve(data);
+                        }, 500);
+                      } else {
+                        resolve(data);
+                      }
+                    }, 1000);
+                  } else {
+                    resolve(data);
+                  }
+                });
+              }
             });
             
             // Close the tab and return the result
@@ -365,33 +416,6 @@ async function processListing(url) {
             resolve(null);
           }
         }
-      });
-    });
-  });
-}
-
-// Function to detach popup into a window
-async function detachPopup() {
-  return new Promise((resolve) => {
-    const popupUrl = chrome.runtime.getURL('popup.html');
-    // Get current window to position the new one relative to it
-    chrome.windows.getCurrent(async (currentWindow) => {
-      const width = 400;
-      const height = 600;
-      // Position the popup window to the right of the current window
-      const left = currentWindow.left + currentWindow.width;
-      const top = currentWindow.top;
-      
-      chrome.windows.create({
-        url: popupUrl,
-        type: 'popup',
-        width,
-        height,
-        left,
-        top,
-        focused: false // Keep focus on the listing tab
-      }, (newWindow) => {
-        resolve(newWindow);
       });
     });
   });
@@ -445,8 +469,149 @@ async function processSearchResults(tab) {
   return results;
 }
 
-// Initialize popup UI and add event listeners
-document.addEventListener('DOMContentLoaded', function() {
+// Function to extract data and send message without focus
+async function extractDataAndSendMessageNoFocus() {
+  return new Promise((resolve) => {
+    const data = {
+      url: window.location.href,
+      price: null,
+      address: null,
+      phone: null,
+      messageSent: false
+    };
+    
+    // Extract price
+    const priceElement = document.querySelector('.info-data-price');
+    if (priceElement) {
+      const priceText = priceElement.textContent.trim();
+      const cleanPrice = priceText.replace(/[^\d.]/g, '');
+      data.price = parseInt(cleanPrice.replace(/\./g, ''));
+    }
+
+    // Extract address
+    const addressElement = document.querySelector('.location');
+    if (addressElement) {
+      data.address = addressElement.textContent.trim();
+    }
+
+    // Click phone button and wait for number
+    const phoneButton = document.querySelector('a.icon-phone');
+    if (phoneButton) {
+      phoneButton.click();
+      setTimeout(() => {
+        const phoneElement = document.querySelector('.phone-number');
+        if (phoneElement) {
+          data.phone = phoneElement.textContent.trim();
+        }
+        
+        // Now try to send message
+        const textarea = document.querySelector('textarea[name="message"]');
+        const sendButton = document.querySelector('button[data-test="send-message"]');
+        
+        if (textarea && sendButton) {
+          textarea.value = 'Salve, sono interessato a questo immobile. È ancora disponibile?';
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          
+          setTimeout(() => {
+            sendButton.click();
+            data.messageSent = true;
+            resolve(data);
+          }, 500);
+        } else {
+          resolve(data);
+        }
+      }, 1000);
+    } else {
+      resolve(data);
+    }
+  });
+}
+
+// Function to process listing without focus
+async function processListingNoFocus(url) {
+  return new Promise((resolve) => {
+    chrome.tabs.create({ url, active: false }, (newTab) => {
+      chrome.tabs.onUpdated.addListener(async function listener(tabId, changeInfo) {
+        if (tabId === newTab.id && changeInfo.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          
+          try {
+            // Wait for page stabilization
+            await new Promise(r => setTimeout(r, 2000));
+            
+            // Extract data and send message
+            const [result] = await chrome.scripting.executeScript({
+              target: { tabId: newTab.id },
+              func: extractDataAndSendMessageNoFocus
+            });
+            
+            // Close the tab and return the result
+            await chrome.tabs.remove(newTab.id);
+            resolve(result?.result || null);
+          } catch (error) {
+            console.error(`Error processing listing ${url}:`, error);
+            await chrome.tabs.remove(newTab.id);
+            resolve(null);
+          }
+        }
+      });
+    });
+  });
+}
+
+// Function to process search results in batches without focus
+async function processSearchResultsInBatches(tab) {
+  const results = [];
+  
+  // Get all listing links
+  const [linksResult] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: getListingLinks
+  });
+  
+  if (!linksResult || !linksResult.result || linksResult.result.length === 0) {
+    console.error('No listing links found');
+    return results;
+  }
+
+  const links = linksResult.result;
+  console.log(`Found ${links.length} listings to process`);
+  
+  // Process listings in batches of 3
+  const batchSize = 3;
+  for (let i = 0; i < links.length; i += batchSize) {
+    const batch = links.slice(i, i + batchSize);
+    console.log(`Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(links.length/batchSize)}`);
+    showStatus(`Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(links.length/batchSize)}...`);
+    
+    try {
+      // Process all listings in the batch simultaneously
+      const batchResults = await Promise.all(
+        batch.map(url => processListingNoFocus(url))
+      );
+      
+      // Add successful results to the array
+      batchResults.forEach(result => {
+        if (result) {
+          results.push(result);
+          showStatus(`Processed ${results.length}/${links.length} listings...`);
+        }
+      });
+      
+      // Add a small delay between batches
+      if (i + batchSize < links.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (error) {
+      console.error('Error processing batch:', error);
+    }
+  }
+  
+  return results;
+}
+
+// Initialize UI
+document.addEventListener('DOMContentLoaded', async function() {
   const buttons = {
     scrapeData: document.getElementById('scrapeData'),
     copyMessage: document.getElementById('copyMessage'),
@@ -463,6 +628,12 @@ document.addEventListener('DOMContentLoaded', function() {
   };
 
   let scrapedData = null;
+  
+  // Check for existing scraping state
+  const { scrapingState } = await chrome.storage.local.get('scrapingState');
+  if (scrapingState) {
+    updateUIFromState(scrapingState);
+  }
 
   // Copy message functionality
   buttons.copyMessage.addEventListener('click', async () => {
@@ -490,9 +661,9 @@ document.addEventListener('DOMContentLoaded', function() {
       });
 
       if (isSearchPage.result) {
-        // Process search results page
-        showStatus('Processing search results...');
-        const results = await processSearchResults(tab);
+        // Process search results page with batch processing
+        showStatus('Processing search results in batches...');
+        const results = await processSearchResultsInBatches(tab);
         
         if (results.length === 0) {
           showStatus('No listings found to process', true);
