@@ -232,7 +232,7 @@ async function extractDataAndSendMessage() {
         console.log('Found textarea:', textarea);
         textarea.value = `Buongiorno,
 
-Abbiamo visto il suo annuncio su Idealista. Offriamo servizi digitali per valorizzare la sua vendita indipendente, con visite virtuali 3D e fotografie professionali che accelerano la vendita e migliorano l'esperienza degli acquirenti.
+Offriamo servizi digitali per valorizzare la sua vendita indipendente, con visite virtuali 3D e fotografie professionali che accelerano la vendita e migliorano l'esperienza degli acquirenti.
         
 Prisma3D non è un'agenzia immobiliare, ma le forniamo strumenti avanzati: visite virtuali, foto di alta qualità, planimetrie, misurazioni precise e analisi dettagliate, il tutto a tariffe competitive.
         
@@ -319,15 +319,35 @@ function getListingLinks() {
   let links = [];
 
   if (isIdealista) {
-    // For Idealista, get links from item containers
-    const linkElements = document.querySelectorAll('.items-container .item-link');
-    links = Array.from(linkElements)
-      .filter(a => !a.querySelector('.listing-alert')) // Filter out promoted listings
-      .map(a => {
-        const href = a.href;
-        // Ensure we have the full URL
-        return href.startsWith('http') ? href : 'https://www.idealista.it' + href;
-      });
+    // Try multiple selectors for Idealista listings
+    const selectors = [
+      '.items-container .item-link',
+      'article.item a',
+      '.item-info-container a',
+      '[data-adid] a',
+      'a[href*="/immobile/"]'
+    ];
+
+    // Try each selector until we find links
+    for (const selector of selectors) {
+      const linkElements = document.querySelectorAll(selector);
+      if (linkElements.length > 0) {
+        console.log(`Found links using selector: ${selector}`);
+        links = Array.from(linkElements)
+          .filter(a => {
+            // Filter out promoted listings and ensure it's a property link
+            return !a.querySelector('.listing-alert') && 
+                   a.href && 
+                   a.href.includes('/immobile/');
+          })
+          .map(a => {
+            const href = a.href;
+            // Ensure we have the full URL
+            return href.startsWith('http') ? href : 'https://www.idealista.it' + href;
+          });
+        break;
+      }
+    }
   }
 
   console.log(`Found ${links.length} listing links`);
@@ -537,17 +557,27 @@ async function processListingNoFocus(url) {
           
           try {
             // Wait for page stabilization
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 5000));
             
             // Extract data and send message
             const [result] = await chrome.scripting.executeScript({
               target: { tabId: newTab.id },
-              func: extractDataAndSendMessageNoFocus
+              func: extractDataAndSendMessage  // Use the original function
             });
+            
+            console.log('Extraction result:', result);
             
             // Close the tab and return the result
             await chrome.tabs.remove(newTab.id);
-            resolve(result?.result || null);
+            
+            // Make sure we resolve with the actual data
+            if (result && result.result) {
+              console.log('Resolving with data:', result.result);
+              resolve(result.result);
+            } else {
+              console.log('No data found in result');
+              resolve(null);
+            }
           } catch (error) {
             console.error(`Error processing listing ${url}:`, error);
             await chrome.tabs.remove(newTab.id);
@@ -590,9 +620,12 @@ async function processSearchResultsInBatches(tab) {
         batch.map(url => processListingNoFocus(url))
       );
       
+      console.log('Batch results:', batchResults);
+      
       // Add successful results to the array
       batchResults.forEach(result => {
         if (result) {
+          console.log('Adding result:', result);
           results.push(result);
           showStatus(`Processed ${results.length}/${links.length} listings...`);
         }
@@ -607,6 +640,7 @@ async function processSearchResultsInBatches(tab) {
     }
   }
   
+  console.log('Final results:', results);
   return results;
 }
 
